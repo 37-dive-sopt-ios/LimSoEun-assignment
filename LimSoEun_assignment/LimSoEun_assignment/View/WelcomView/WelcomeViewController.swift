@@ -5,11 +5,16 @@
 //  Created by 임소은 on 10/23/25.
 //
 
-import Foundation
 import UIKit
+
+import Combine
+import Foundation
 import SnapKit
 
 final class WelcomeViewController: UIViewController {
+    
+    private let viewModel: WelcomeViewModel
+    private var bag = Set<AnyCancellable>()
     
     var name: String?
     
@@ -34,7 +39,6 @@ final class WelcomeViewController: UIViewController {
         label.text = "???님 \n반가워요!"
         label.font = .font(.pretendardSemiBold, ofSize: 18)
         label.textAlignment = .center
-      //  label.numberOfLines = 1
         return label
     }()
     
@@ -49,10 +53,14 @@ final class WelcomeViewController: UIViewController {
         return button
     }()
     
-    private func bindID() {
-        guard let name = name else { return }
-        self.welcomePersonLabel.text = "\(name)님 \n반가워요!"
-    }
+    // MARK: - Init (name 대신 ViewModel 주입)
+       init(viewModel: WelcomeViewModel) {
+           self.viewModel = viewModel
+           super.init(nibName: nil, bundle: nil)
+       }
+       @available(*, unavailable) required init?(coder: NSCoder) {
+           fatalError("init(coder:) has not been implemented")
+       }
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -60,8 +68,22 @@ final class WelcomeViewController: UIViewController {
         self.view.backgroundColor = .white
         setupNavigation()
         setLayout()
-        bindID()
+        bind()
     }
+    
+    
+    // MARK: - Bind
+    private func bind() {
+        let output = viewModel.transform(.init())
+        output.welcomeText
+            .receive(on: RunLoop.main)
+            .sink { [weak self] text in
+                self?.welcomePersonLabel.text = text
+            }
+            .store(in: &bag)
+    }
+    
+    // MARK: - Layout
     
     private func setLayout() {
         [logoImageView, welcomeLabel, welcomePersonLabel, goHomeButton].forEach {
@@ -112,6 +134,3 @@ final class WelcomeViewController: UIViewController {
     }
 }
 
-#Preview {
-    WelcomeViewController()
-}
