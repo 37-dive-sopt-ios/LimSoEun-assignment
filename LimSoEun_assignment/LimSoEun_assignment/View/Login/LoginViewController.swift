@@ -6,12 +6,22 @@
 //  Created by 임소은 on 10/23/25.
 //
 
-import Foundation
 import UIKit
+
+import Combine
+import Foundation
 import SnapKit
+
 
 final class LoginViewController: UIViewController, UITextFieldDelegate {
     
+    // MARK: - MVVM + Combine
+    private let loginViewModel = LoginViewModel()
+    private var bag = Set<AnyCancellable>()
+    private let emailSubject = PassthroughSubject<String, Never>()
+    private let passwordSubject = PassthroughSubject<String, Never>()
+    private let loginTapSubject = PassthroughSubject<Void, Never>()
+
     //MARK: - UI
     private let navigationView = CustomNavigationView(title: "이메일 또는 아이디로 계속")
     
@@ -64,11 +74,59 @@ final class LoginViewController: UIViewController, UITextFieldDelegate {
         setupNavigation()
         setLayout()
         
-        emailField.textField.addTarget(self, action: #selector(textFieldDidChange), for: .editingChanged)
-        passwordTextField.textField.addTarget(self, action: #selector(textFieldDidChange), for: .editingChanged)
+
+        // UITextField → Subject
+        emailField.textField.addTarget(self, action: #selector(textFieldChanged(_:)), for: .editingChanged)
+        passwordTextField.textField.addTarget(self, action: #selector(textFieldChanged(_:)), for: .editingChanged)
+
+        bind()
         
     }
- 
+    
+    // MARK: - Bind
+    private func bind() {
+        let email = emailSubject
+            .prepend(emailField.textField.text ?? "")
+            .eraseToAnyPublisher()
+        
+        let password = passwordSubject
+            .prepend(passwordTextField.textField.text ?? "")
+            .eraseToAnyPublisher()
+        
+        let input = LoginViewModel.Input(
+            email: email,
+            password: password,
+            loginTap: loginTapSubject.eraseToAnyPublisher()
+        )
+        let output = loginViewModel.transform(input)
+        
+        output.isLoginEnabled
+            .receive(on: RunLoop.main)
+            .sink { [weak self] enabled in
+                guard let self = self else { return }
+                let color = enabled ? UIColor.baeminMint500.cgColor : UIColor.baeminGray200.cgColor
+                self.loginButton.layer.backgroundColor = color
+                self.loginButton.layer.borderColor = color
+                self.loginButton.isEnabled = enabled
+            }
+            .store(in: &bag)
+        
+        output.showToast
+            .receive(on: RunLoop.main)
+            .sink { [weak self] message in
+                self?.showToast(message: message)
+            }
+            .store(in: &bag)
+        
+        output.routeToWelcome
+            .receive(on: RunLoop.main)
+            .sink { [weak self] email in
+                self?.pushToWelcomeVC(with: email)
+            }
+            .store(in: &bag)
+    }
+    
+    
     //MARK: - layout
     private func setLayout() {
         [emailField, passwordTextField, loginButton, findAccountButton].forEach {
@@ -107,62 +165,33 @@ final class LoginViewController: UIViewController, UITextFieldDelegate {
         navigationView.onBackButtonTap = { [weak self] in
             self?.navigationController?.popViewController(animated: true)
         }
-        
         navigationView.snp.makeConstraints {
             $0.top.equalTo(view.safeAreaLayoutGuide)
             $0.leading.trailing.equalToSuperview()
             $0.height.equalTo(45)
         }
     }
-    //MARK: - 화면이동
-    private func pushToWelcomeVC() {
-           let welcomeViewController = WelcomeViewController()
-            welcomeViewController.name = emailField.textField.text
-           self.navigationController?.pushViewController(welcomeViewController, animated: true)
-       }
+    
+    // MARK: - Actions
+    @objc private func textFieldChanged(_ tf: UITextField) {
+        if tf === emailField.textField { emailSubject.send(tf.text ?? "") }
+        if tf === passwordTextField.textField { passwordSubject.send(tf.text ?? "") }
+    }
+    
     ///뒤로가기 액션
     @objc private func backButtonTapped() {
-            dismiss(animated: true)
-        }
+        dismiss(animated: true)
+    }
     ///로그인버튼 클릭 시 액션
     @objc
     private func loginButtonDidTap() {
-    
-        ///이메일 정규식 안맞으면  토스트 버튼 활성화
-        guard let email = emailField.textField.text, Validator.isValidEmail(email) else {
-                showToast(message: "이메일 형식이 달라요")
-                return
-            }
-        pushToWelcomeVC()
+        loginTapSubject.send(())
     }
     
-    //MARK: - 로그인 버튼 활성화
-    @objc private func textFieldDidChange() {
-        let isEmailFilled = !(emailField.textField.text ?? "").isEmpty
-        let isPasswordFilled = !(passwordTextField.textField.text ?? "").isEmpty
-        
-        if isEmailFilled && isPasswordFilled {
-            loginButton.layer.backgroundColor = UIColor.baeminMint500.cgColor
-            loginButton.layer.borderColor = UIColor.baeminMint500.cgColor
-        } else {
-            loginButton.layer.backgroundColor = UIColor.baeminGray200.cgColor
-            loginButton.layer.borderColor = UIColor.baeminGray200.cgColor
-        }
+    // MARK: - Routing
+    private func pushToWelcomeVC(with email: String) {
+        let vm = WelcomeViewModel(name: email)
+        let vc = WelcomeViewController(viewModel: vm)
+        navigationController?.pushViewController(vc, animated: true)
     }
-}
-
-//MARK: - UITextField Extension
-extension UITextField {
-    //textField 색상변경
-    func setPlaceholder(color: UIColor) {
-            guard let string = self.placeholder else {
-                return
-            }
-            attributedPlaceholder = NSAttributedString(string: string, attributes: [.foregroundColor: color])
-        }
-}
-
-//MARK: - Preview
-#Preview {
-    LoginViewController()
 }

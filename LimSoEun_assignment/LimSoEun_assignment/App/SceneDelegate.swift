@@ -17,7 +17,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         let window = UIWindow(windowScene: windowScene)
 
-        let rootVC = MainTapBarController()
+        let rootVC = LoginViewController()
         let navController = UINavigationController(rootViewController: rootVC)
         window.rootViewController = navController
 
